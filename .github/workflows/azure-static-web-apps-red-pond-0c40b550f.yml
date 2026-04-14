@@ -40,7 +40,7 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "/Users/tanuskabiswakarma/cloud_computing_sipp/frontend/app.js" # App source code path
+          app_location: "https://github.com/TanuskaB/tanuskab-sipp/blob/main/frontend/app.js" # App source code path
           api_location: "" # Api source code path - optional
           output_location: "" # Built app content directory - optional
           github_id_token: ${{ steps.idtoken.outputs.result }}
