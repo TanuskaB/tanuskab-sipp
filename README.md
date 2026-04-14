@@ -1,47 +1,50 @@
 # Serverless Image Processing Platform
 
-Azure-based platform that automatically resizes, compresses, and optionally converts images to grayscale the moment they are uploaded — no server management required.
+This project lets users upload an image from a small web frontend, stores it in Azure Blob Storage, and processes it with Azure Functions. The processed image is resized, compressed, and optionally converted to grayscale.
 
-## Architecture
+## How It Works
 
-```
-User → Frontend (Static Web App)
-         │
-         ▼
-    Azure Blob Storage  (input-images container)
-         │
-         │  BlobTrigger
-         ▼
-    Azure Function  (Python)
-    ─ Resize to max 800 px
-    ─ JPEG compress @ 85 %
-    ─ Grayscale (if filename ends with _gray)
-         │
-         ▼
-    Azure Blob Storage  (processed-images container)
-         │
-         ▼
-      User downloads result
+1. The frontend sends an image to the Azure Function HTTP endpoint at `/api/upload`.
+2. The function saves the file into the `input-images` blob container.
+3. A blob-triggered Azure Function processes the image.
+4. The processed result is written to the `processed-images` blob container.
+5. The frontend polls the processed container and shows the finished image.
+
+## Project Structure
+
+```text
+.
+├── function_app/
+│   ├── function_app.py
+│   ├── host.json
+│   ├── local.settings.json.example
+│   └── requirements.txt
+├── frontend/
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── scripts/
+│   └── setup_azure.sh
+└── tests/
+    └── test_processing.py
 ```
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11 recommended
+- `pip`
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-- Azure CLI — install on Ubuntu/Debian:
-  ```bash
-  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-  az login
-  ```
-- An Azure account (Student / Free Tier works)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
+- An Azure Storage connection string for local development
 
-## Local Development
+## Build And Run Locally
 
-### 1. Install dependencies
+### 1. Install the Function App dependencies
 
 ```bash
 cd function_app
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -49,88 +52,130 @@ pip install -r requirements.txt
 
 ```bash
 cp local.settings.json.example local.settings.json
-# Edit local.settings.json and fill in your storage connection string
 ```
 
-### 3. Run the function locally
+Then edit `function_app/local.settings.json` and set both:
+
+- `AzureWebJobsStorage`
+- `AzureStorageConnectionString`
+
+to the same Azure Storage connection string.
+
+### 3. Start the Azure Function locally
+
+From `function_app/`:
 
 ```bash
 func start
 ```
 
-The function listens for new blobs in `input-images`. Use Azure Storage Explorer or `az storage blob upload` to drop test images in.
+The upload endpoint will be available at:
 
-### 4. Run the frontend locally
-
-```bash
-cd ../frontend
-# Any static file server works:
-python -m http.server 8080
+```text
+http://localhost:7071/api/upload
 ```
 
-Open `http://localhost:8080`. Update `CONFIG.uploadUrl` in `app.js` to point at your local function endpoint.
+### 4. Point the frontend at the local function
+
+Edit `frontend/app.js` and set:
+
+```js
+uploadUrl: "http://localhost:7071/api/upload"
+```
+
+You can leave `processedContainerUrl` pointing at your Azure blob container if you want the frontend to preview processed results from storage.
+
+### 5. Start the frontend
+
+In a second terminal:
+
+```bash
+cd frontend
+python3 -m http.server 8080
+```
+
+Then open:
+
+```text
+http://localhost:8080
+```
 
 ## Run Tests
 
+From the repo root:
+
 ```bash
-pip install pillow pytest
-pytest tests/ -v
+python3 -m pip install pytest Pillow
+python3 -m pytest tests/ -v
 ```
 
-## Deploy to Azure
+## Deploy To Azure
 
-### 1. Provision resources
+### 1. Provision Azure resources
 
 ```bash
 bash scripts/setup_azure.sh
 ```
 
-This creates the resource group, storage account, blob containers, and Function App. Copy the printed connection string.
+This script creates:
 
-### 2. Create `local.settings.json`
+- a resource group
+- a storage account
+- the `input-images` container
+- the `processed-images` container
+- a Linux Azure Function App
+
+It also prints the storage connection string and generated Function App name.
+
+### 2. Set local settings for deployment and local testing
 
 ```bash
 cp function_app/local.settings.json.example function_app/local.settings.json
-# Paste the connection string from step 1
 ```
 
-### 3. Deploy the function
+Paste the connection string printed by the setup script into:
+
+- `AzureWebJobsStorage`
+- `AzureStorageConnectionString`
+
+### 3. Publish the Azure Function
 
 ```bash
 cd function_app
 func azure functionapp publish <YOUR_FUNCTION_APP_NAME>
 ```
 
+After deployment, your upload endpoint will look like:
+
+```text
+https://<YOUR_FUNCTION_APP_NAME>.azurewebsites.net/api/upload
+```
+
 ### 4. Deploy the frontend
 
-In the Azure Portal:
-1. Create an **Azure Static Web App** resource.
-2. Connect it to your GitHub repo (or upload the `frontend/` folder directly).
-3. Copy the Static Web App URL and update `CONFIG.processedContainerUrl` in `frontend/app.js`.
+Deploy the `frontend/` folder with Azure Static Web Apps or any static hosting service.
 
-## Image Operations
+After that, update `frontend/app.js` with:
 
-| Trigger | Operation |
-|---|---|
-| Any upload | Resize (max 800 px, aspect preserved) + JPEG compress @ 85 % |
-| Filename ends with `_gray` | Additionally converts to grayscale |
+- `uploadUrl`: your deployed Azure Function URL
+- `processedContainerUrl`: your public `processed-images` blob container URL
 
-Example: upload `sunset_gray.jpg` → processed image is grayscale + resized.
+## Image Processing Rules
 
-## Project Structure
+- Images are resized so their longest side is at most `800px`
+- Output is saved as JPEG with quality `85`
+- If the filename ends with `_gray`, the image is converted to grayscale
 
-```
-├── function_app/
-│   ├── function_app.py           # Azure Function (BlobTrigger)
-│   ├── host.json
-│   ├── requirements.txt
-│   └── local.settings.json.example
-├── frontend/
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-├── scripts/
-│   └── setup_azure.sh            # One-shot Azure provisioning
-└── tests/
-    └── test_processing.py        # Unit tests (no Azure needed)
-```
+Example:
+
+- `photo.jpg` -> resized and compressed
+- `photo_gray.jpg` -> resized, compressed, and converted to grayscale
+
+## Notes
+
+- The frontend is a plain static app in `frontend/`
+- The backend logic lives in `function_app/function_app.py`
+- The local settings file contains secrets and should not be committed
+
+## Image Processing Website:
+link: https://thankful-water-060a3030f.7.azurestaticapps.net
