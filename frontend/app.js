@@ -97,8 +97,8 @@ async function pollForResult(blobName) {
 
   while (Date.now() < deadline) {
     await sleep(CONFIG.pollIntervalMs);
-    const res = await fetch(url, { method: "HEAD" });
-    if (res.ok) {
+    const ready = await canLoadImage(url);
+    if (ready) {
       setStatus(`Done! Processed in ~${Math.round((CONFIG.pollTimeoutMs - (deadline - Date.now())) / 1000)}s`, false);
       addGalleryItem(blobName, url);
       selectedFile = null;
@@ -158,4 +158,13 @@ function formatBytes(bytes) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function canLoadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+  });
 }
