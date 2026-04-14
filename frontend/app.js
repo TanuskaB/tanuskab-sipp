@@ -8,7 +8,7 @@ const CONFIG = {
 
   // Base URL of the processed-images blob container (public read)
   // e.g. "https://serverlessimgstorage.blob.core.windows.net/processed-images"
-  processedContainerUrl: "https://red-pond-0c40b550f.7.azurestaticapps.net/",
+  processedContainerUrl: "https://happy-forest-04234cd0f.7.azurestaticapps.net/",
 
   pollIntervalMs: 2000,
   pollTimeoutMs: 30000,
