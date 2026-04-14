@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName=imgstorage19273;AccountKey=3snds8gsdGkkfMMgKE6l8Wf7tjAVzoazB+aXOB3uy5wV6bS3fOO36pXW0txeLc8d1kBH8aX1BfTs+AStz3QGUw==;BlobEndpoint=https://imgstorage19273.blob.core.windows.net/;FileEndpoint=https://imgstorage19273.file.core.windows.net/;QueueEndpoint=https://imgstorage19273.queue.core.windows.net/;TableEndpoint=https://imgstorage19273.table.core.windows.net/",
+     "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureStorageConnectionString": "DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName=imgstorage19273;AccountKey=3snds8gsdGkkfMMgKE6l8Wf7tjAVzoazB+aXOB3uy5wV6bS3fOO36pXW0txeLc8d1kBH8aX1BfTs+AStz3QGUw==;BlobEndpoint=https://imgstorage19273.blob.core.windows.net/;FileEndpoint=https://imgstorage19273.file.core.windows.net/;QueueEndpoint=https://imgstorage19273.queue.core.windows.net/;TableEndpoint=https://imgstorage19273.table.core.windows.net/"
+  }
+  
+}

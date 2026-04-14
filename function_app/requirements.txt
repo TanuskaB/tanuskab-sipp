@@ -1,0 +1,3 @@
+azure-functions
+Pillow>=10.0.0
+azure-storage-blob>=12.0.0
