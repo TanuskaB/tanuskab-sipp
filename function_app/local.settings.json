@@ -1,9 +1,0 @@
-{
-  "IsEncrypted": false,
-  "Values": {
-    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=imgstorage19273;AccountKey=3snds8gsdGkkfMMgKE6l8Wf7tjAVzoazB+aXOB3uy5wV6bS3fOO36pXW0txeLc8d1kBH8aX1BfTs+AStz3QGUw==;EndpointSuffix=core.windows.net",
-     "FUNCTIONS_WORKER_RUNTIME": "python",
-    "AzureStorageConnectionString": "DefaultEndpointsProtocol=https;AccountName=imgstorage19273;AccountKey=3snds8gsdGkkfMMgKE6l8Wf7tjAVzoazB+aXOB3uy5wV6bS3fOO36pXW0txeLc8d1kBH8aX1BfTs+AStz3QGUw==;EndpointSuffix=core.windows.net"
-  }
-  
-}
