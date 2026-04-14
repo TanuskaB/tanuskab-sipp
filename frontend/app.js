@@ -4,7 +4,7 @@
 const CONFIG = {
   // Azure Function URL for the HTTP-triggered upload endpoint
   // e.g. "https://serverless-img-func.azurewebsites.net/api/upload"
-  uploadUrl: "https://serverlesimgstorage2056.file.core.windows.net", 
+  uploadUrl: "https://serverlessimgfunc1164.azurewebsites.net/api/upload", 
 
   // Base URL of the processed-images blob container (public read)
   // e.g. "https://serverlessimgstorage.blob.core.windows.net/processed-images"
