@@ -1,13 +1,92 @@
-import logging
-import time
+import cgi
 import io
+import json
+import logging
+import os
+import time
 import azure.functions as func
+from azure.core.exceptions import ResourceExistsError
+from azure.storage.blob import BlobServiceClient
 from PIL import Image
 
 app = func.FunctionApp()
 
 MAX_DIMENSION = 800
 JPEG_QUALITY = 85
+
+
+@app.route(route="upload", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+
+def upload_image(req: func.HttpRequest) -> func.HttpResponse:
+    content_type = req.headers.get("content-type", "")
+    if not content_type.startswith("multipart/form-data"):
+        return func.HttpResponse(
+            json.dumps({"error": "Expected multipart/form-data upload."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    body = req.get_body()
+    form = cgi.FieldStorage(
+        fp=io.BytesIO(body),
+        environ={
+            "REQUEST_METHOD": "POST",
+            "CONTENT_TYPE": content_type,
+            "CONTENT_LENGTH": str(len(body)),
+        },
+        keep_blank_values=True,
+    )
+
+    if "file" not in form:
+        return func.HttpResponse(
+            json.dumps({"error": "Missing file field in form data."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    upload = form["file"]
+    file_bytes = upload.file.read() if upload.file else b""
+    blob_name = os.path.basename(upload.filename or "")
+
+    if not blob_name:
+        return func.HttpResponse(
+            json.dumps({"error": "Uploaded file must have a filename."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    if not file_bytes:
+        return func.HttpResponse(
+            json.dumps({"error": "Uploaded file is empty."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    connection_string = os.environ.get("AzureStorageConnectionString")
+    if not connection_string:
+        logging.error("AzureStorageConnectionString is not configured.")
+        return func.HttpResponse(
+            json.dumps({"error": "Storage connection is not configured."}),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    blob_service = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service.get_container_client("input-images")
+    try:
+        container_client.create_container()
+    except ResourceExistsError:
+        pass
+    blob_client = container_client.get_blob_client(blob_name)
+    blob_client.upload_blob(file_bytes, overwrite=True)
+
+    logging.info("Accepted upload for %s (%d bytes)", blob_name, len(file_bytes))
+
+    return func.HttpResponse(
+        json.dumps({"message": "Upload accepted.", "blobName": blob_name}),
+        status_code=202,
+        mimetype="application/json",
+    )
 
 
 @app.blob_trigger(
