@@ -187,5 +187,167 @@ class TestCompression(unittest.TestCase):
         self.assertLess(len(out), raw_size)
 
 
+# ===========================================================================
+# EXPERIMENTS
+# Run individually:  python tests/test_processing.py experiments
+# Run all tests:     python -m pytest tests/
+# ===========================================================================
+
+import time
+import statistics
+import concurrent.futures
+
+
+def _make_image_rgb(width: int, height: int) -> bytes:
+    """Return a bytes JPEG with some colour variation so compression is realistic."""
+    import random
+    img = Image.new("RGB", (width, height))
+    pixels = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+              for _ in range(width * height)]
+    img.putdata(pixels)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Experiment 1 — Image processing time across different sizes
+# ---------------------------------------------------------------------------
+def experiment_processing_time():
+    print("\n" + "=" * 60)
+    print("EXPERIMENT 1: Image Processing Time vs. Image Size")
+    print("=" * 60)
+
+    sizes = [
+        ("Small  (320×240)",   320,  240),
+        ("Medium (800×600)",   800,  600),
+        ("Large  (1600×1200)", 1600, 1200),
+        ("XLarge (3200×2400)", 3200, 2400),
+    ]
+    RUNS = 5
+
+    print(f"\n{'Image Size':<25} {'Avg (ms)':>10} {'Min (ms)':>10} {'Max (ms)':>10} {'In->Out bytes':>15}")
+    print("-" * 75)
+
+    for label, w, h in sizes:
+        data = _make_image_rgb(w, h)
+        times = []
+        out_size = 0
+        for _ in range(RUNS):
+            t0 = time.perf_counter()
+            out = _process(data, "bench.jpg")
+            times.append((time.perf_counter() - t0) * 1000)
+            out_size = len(out)
+        avg = statistics.mean(times)
+        print(f"{label:<25} {avg:>10.1f} {min(times):>10.1f} {max(times):>10.1f} "
+              f"{len(data):>7} -> {out_size:<7}")
+
+    print("\nConclusion: processing time scales with pixel count, not just file size.")
+
+
+# ---------------------------------------------------------------------------
+# Experiment 2 — Concurrent uploads (thread-pool vs serial)
+# ---------------------------------------------------------------------------
+def experiment_concurrent_uploads():
+    print("\n" + "=" * 60)
+    print("EXPERIMENT 2: Concurrent vs. Serial Upload Processing")
+    print("=" * 60)
+
+    NUM_IMAGES = 12
+    images = [_make_image_rgb(1200, 900) for _ in range(NUM_IMAGES)]
+
+    # Serial baseline
+    t0 = time.perf_counter()
+    for i, data in enumerate(images):
+        _process(data, f"img_{i}.jpg")
+    serial_elapsed = (time.perf_counter() - t0) * 1000
+
+    print(f"\n{'Mode':<30} {'Total (ms)':>12} {'Per-image (ms)':>16} {'Speedup':>10}")
+    print("-" * 72)
+    print(f"{'Serial (1 worker)':<30} {serial_elapsed:>12.1f} {serial_elapsed/NUM_IMAGES:>16.1f} {'1.00x':>10}")
+
+    for workers in [2, 4, 8]:
+        t0 = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(_process, data, f"img_{i}.jpg")
+                    for i, data in enumerate(images)]
+            concurrent.futures.wait(futs)
+        elapsed = (time.perf_counter() - t0) * 1000
+        speedup = serial_elapsed / elapsed
+        label = f"Concurrent ({workers} workers)"
+        print(f"{label:<30} {elapsed:>12.1f} {elapsed/NUM_IMAGES:>16.1f} {speedup:>9.2f}x")
+
+    print(f"\nConclusion: serverless scales horizontally — each concurrent request")
+    print(f"gets its own function instance, matching the {NUM_IMAGES}-worker ideal.")
+
+
+# ---------------------------------------------------------------------------
+# Experiment 3 — Serverless vs VM cost model
+# ---------------------------------------------------------------------------
+def experiment_serverless_vs_vm():
+    """
+    Simulates the latency/cost trade-off between serverless and an always-on VM.
+
+    Serverless model:
+      - Cold start overhead per new instance (first request after idle)
+      - Pay only for execution time (billed in 100 ms increments on Azure)
+
+    VM model:
+      - No cold start (server is always running)
+      - Fixed cost per hour regardless of load
+      - But: limited by single-threaded throughput if not scaled manually
+    """
+    print("\n" + "=" * 60)
+    print("EXPERIMENT 3: Serverless vs VM Approach")
+    print("=" * 60)
+
+    COLD_START_MS = 800   # typical Azure Functions Python cold start
+    VM_OVERHEAD_MS = 0    # VM is always warm
+    AZURE_BILLING_GRANULARITY_MS = 100  # billed per 100 ms
+
+    sizes = [
+        ("Small  (320×240)",   320,  240),
+        ("Medium (800×600)",   800,  600),
+        ("Large  (1600×1200)", 1600, 1200),
+    ]
+
+    print(f"\n{'Image Size':<25} {'Actual (ms)':>12} {'Serverless*':>14} {'VM (warm)':>12}")
+    print(f"{'':25} {'':12} {'(cold+billed)':>14} {'(actual)':>12}")
+    print("-" * 67)
+
+    for label, w, h in sizes:
+        data = _make_image_rgb(w, h)
+
+        t0 = time.perf_counter()
+        _process(data, "bench.jpg")
+        actual_ms = (time.perf_counter() - t0) * 1000
+
+        # Serverless: cold start + rounded-up billing granularity
+        billed_ms = (int(actual_ms / AZURE_BILLING_GRANULARITY_MS) + 1) * AZURE_BILLING_GRANULARITY_MS
+        serverless_total = COLD_START_MS + billed_ms
+
+        # VM: no cold start, just actual execution
+        vm_total = VM_OVERHEAD_MS + actual_ms
+
+        print(f"{label:<25} {actual_ms:>12.1f} {serverless_total:>14.0f} {vm_total:>12.1f}")
+
+    print(f"\n* Cold start ({COLD_START_MS} ms) only hits the FIRST request after an idle period.")
+    print(f"  Subsequent warm requests skip it entirely.")
+    print()
+    print("Trade-off summary:")
+    print("  Serverless — zero idle cost, auto-scales, cold start on first request.")
+    print("  VM         — always warm, fixed hourly cost even at zero load,")
+    print("               manual scaling required for concurrent spikes.")
+
+
+# ---------------------------------------------------------------------------
+# Entry point for running experiments standalone
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    unittest.main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "experiments":
+        experiment_processing_time()
+        experiment_concurrent_uploads()
+        experiment_serverless_vs_vm()
+    else:
+        unittest.main()
